@@ -1,13 +1,14 @@
 {
   "name": "@buttery-auth/utils",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "A collection of utilities for buttery-auth",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "scripts": {
     "test": "vitest",
-    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "build": "unbuild",
     "lint:fix": "biome check . --write"
   },
   "keywords": [
@@ -42,17 +43,17 @@
       "import": "./dist/base64.mjs",
       "require": "./dist/base64.cjs"
     },
-    "./cookies": {
-      "import": "./dist/cookies.mjs",
-      "require": "./dist/cookies.cjs"
-    },
-    "./digest": {
-      "import": "./dist/digest.mjs",
-      "require": "./dist/digest.cjs"
+    "./hash": {
+      "import": "./dist/hash.mjs",
+      "require": "./dist/hash.cjs"
     },
     "./ecdsa": {
       "import": "./dist/ecdsa.mjs",
       "require": "./dist/ecdsa.cjs"
+    },
+    "./hex": {
+      "import": "./dist/hex.mjs",
+      "require": "./dist/hex.cjs"
     },
     "./hmac": {
       "import": "./dist/hmac.mjs",
@@ -70,5 +71,8 @@
       "import": "./dist/rsa.mjs",
       "require": "./dist/rsa.cjs"
     }
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

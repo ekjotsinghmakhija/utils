@@ -1,16 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { createOTP } from "./otp";
 
-const { generateHOTP, generateTOTP, verifyTOTP } = createOTP();
+
 describe("HOTP and TOTP Generation Tests", () => {
 	it("should generate a valid HOTP for a given counter", async () => {
 		const key = "1234567890";
 		const counter = 1;
 		const digits = 6;
-
-		const otp = await generateHOTP(key, {
-			counter,
-		});
+		const otp = await createOTP(key, {
+			digits
+		}).hotp(counter);
 		expect(otp).toBeTypeOf("string");
 		expect(otp.length).toBe(digits);
 	});
@@ -20,46 +19,50 @@ describe("HOTP and TOTP Generation Tests", () => {
 		const counter = 1;
 
 		await expect(
-			generateHOTP(key, {
-				counter,
-				digits: 9,
-			}),
+			createOTP(key, {
+				digits: 9
+			}).hotp(counter)
 		).rejects.toThrow("Digits must be between 1 and 8");
 		await expect(
-			generateHOTP(key, {
-				counter,
-				digits: 0,
-			}),
+			createOTP(key, {
+				digits: 0
+			}).hotp(counter)
 		).rejects.toThrow("Digits must be between 1 and 8");
 	});
 
 	it("should generate a valid TOTP based on current time", async () => {
 		const secret = "1234567890";
-		const milliseconds = 3000;
 		const digits = 6;
 
-		const otp = await generateTOTP(secret, { milliseconds, digits });
+		const otp = await createOTP(secret, {
+			digits
+		}).totp();
 		expect(otp).toBeTypeOf("string");
 		expect(otp.length).toBe(digits);
 	});
 
 	it("should generate different OTPs after each time window", async () => {
 		const secret = "1234567890";
-		const milliseconds = 3000;
+		const seconds = 30;
 		const digits = 6;
 
-		const otp1 = await generateTOTP(secret, { milliseconds, digits });
+		const otp1 = await createOTP(secret, {
+			period: seconds,
+			digits
+		}).totp();
 		vi.useFakeTimers();
-		await vi.advanceTimersByTimeAsync(milliseconds);
-		const otp2 = await generateTOTP(secret, { milliseconds, digits });
+		await vi.advanceTimersByTimeAsync(30000);
+		const otp2 = await createOTP(secret, {
+			period: seconds,
+			digits
+		}).totp();
 		expect(otp1).not.toBe(otp2);
 	});
 
 	it("should verify correct TOTP against generated value", async () => {
 		const secret = "1234567890";
-		const totp = await generateTOTP(secret, { milliseconds: 3000, digits: 6 });
-
-		const isValid = await verifyTOTP(totp, { secret });
+		const totp = await createOTP(secret).totp();
+		const isValid = await createOTP(secret).verify(totp);
 		expect(isValid).toBe(true);
 	});
 
@@ -67,21 +70,22 @@ describe("HOTP and TOTP Generation Tests", () => {
 		const secret = "1234567890";
 		const invalidTOTP = "000000";
 
-		const isValid = await verifyTOTP(invalidTOTP, { secret });
+		const isValid = await createOTP(secret).verify(invalidTOTP);
+		console.log(isValid);
 		expect(isValid).toBe(false);
 	});
 
 	it("should verify TOTP within the window", async () => {
 		const secret = "1234567890";
-		const totp = await generateTOTP(secret, { milliseconds: 3000, digits: 6 });
-		const isValid = await verifyTOTP(totp, { secret, window: 1 });
+		const totp = await createOTP(secret).totp();
+		const isValid = await createOTP(secret).verify(totp, { window: 1 });
 		expect(isValid).toBe(true);
 	});
 
 	it("should return false for TOTP outside the window", async () => {
 		const secret = "1234567890";
-		const totp = await generateTOTP(secret, { milliseconds: 3000, digits: 6 });
-		const isValid = await verifyTOTP(totp, { secret, window: -1 });
+		const totp = await createOTP(secret).totp();
+		const isValid = await createOTP(secret).verify(totp, { window: -1 });
 		expect(isValid).toBe(false);
 	});
 });
