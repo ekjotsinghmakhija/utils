@@ -1,6 +1,6 @@
 {
   "name": "@buttery-auth/utils",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "A collection of utilities for buttery-auth",
   "main": "./dist/index.cjs",
@@ -42,6 +42,10 @@
     "./base64": {
       "import": "./dist/base64.mjs",
       "require": "./dist/base64.cjs"
+    },
+    "./binary": {
+      "import": "./dist/binary.mjs",
+      "require": "./dist/binary.cjs"
     },
     "./hash": {
       "import": "./dist/hash.mjs",
