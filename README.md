@@ -1,8 +1,6 @@
 # Buttery Auth Utils
 
-A simple typescript API for common auth related operations built on top of Web Crypto API.
-
-It integrates [uncrypto](https://github.com/unjs/uncrypto) to provide a unified API for both Node.js (using the Crypto module) and web environments (using the Web Crypto API) through Conditional Exports.
+A simple typescript API for common auth utilities like hashing, encryption, encoding, and OTP generation. Built on top of Web Crypto APIs and it wraps over [uncrypto](https://github.com/unjs/uncrypto) to provide a unified API for both Node.js (using the Crypto module) and web environments (using the Web Crypto API) through Conditional Exports.
 
 ```bash
 pnpm add @buttery-auth/utils
@@ -14,70 +12,84 @@ utilities provided by `@buttery-auth/utils`:
 
 | Utility          | Description                                        |
 |-------------------|----------------------------------------------------|
-| [**Digest**](#digest) | Hash inputs using sha family hash functions.      |
+| [**Hash**](#hash) | Hash inputs using sha family hash functions.      |
 | [**HMAC**](#hmac) | Hash inputs using HMAC with a secret key.          |
 | [**Random String**](#random-string) | Generate random strings with a specified length and charset. |
 | [**RSA**](#rsa)   | Perform encryption, decryption, signing, and verification with RSA keys. |
 | [**ECDSA**](#ecdsa) | Perform signing and verification with ECDSA keys. |
 | [**Base64**](#base64) | Encode and decode data in base64 format.          |
+| [**Hex**](#hex)   | Encode and decode data in hexadecimal format.      |
 | [**OTP**](#otp) | Generate and verify one-time passwords.            |
-| [**Cookies**](#cookies) | Parse, serialize, and manage HTTP cookies.         |
 
-## Digest
+
+## Hash
 
 Digest provides a way to hash an input using sha family hash functions. It wraps over `crypto.digest` and provide utilities to encode output in hex or base 64.
 
 ```ts
-import { digest } from "@buttery-auth/utils/digest"
+import { createHash } from "@buttery-auth/utils/digest"
 
-const hashBuffer = await digest("text", "SHA-256"); // "SHA1" | "SHA512" | "SHA382"
-const hashInHex = await digest("text", "SHA-512", "hex"); // "raw" (default)
+const hashBuffer = await createHash("SHA-256").digest("text");
+const hashInHex = await createHash("SHA-256", "hex").digest("text");
 ```
 
-To encode output in base64, you should use `base64` utility on the output buffer.
+To encode output in base64
 
 ```ts
-import { base64 } from "@buttery-auth/utils/base64"
-const hashInBase64 = await base64.encode(await digest("text", "SHA-512"));
+const hashInBase64 = await createHash("SHA-256", "base64").digest("text");
 ```
 
 ## HMAC
 
-HMAC provides a way to hash an input using sha family hash functions with a secret key. It provides `sign`, `verify` and `createHmac` utilities.
+The HMAC utility allows you to securely hash data using a secret key and SHA family hash functions. It provides methods to `sign`, `verify`, and `create` a customized HMAC instance with specific hashing algorithms and encoding formats.
 
-### Import Key
+### Create HMAC
+
+To create an HMAC instance, use the createHMAC function. You can specify the SHA family algorithm ("SHA-256", "SHA-384", or "SHA-512") and the desired encoding format ("none", "hex", "base64", "base64url", or "base64urlnopad").
 
 It takes a secret key and returns a key object which could be used to sign and verify data.
 
 ```ts
-const secretKey = "my-secret-key" // it could also be a buffer
-const key = await hmac.importKey("SHA-256", secretKey);
+import { createHMAC } from './hmac';
+
+const hmac = createHMAC("SHA-256", "hex"); // Customize algorithm and encoding
+```
+
+### Import Key
+
+The importKey method takes a secret key (string, buffer, or typed array) and returns a CryptoKey object that can be used for signing and verifying data.
+  
+```ts
+const secretKey = "my-secret-key"; // Can also be a buffer or TypedArray
+const key = await hmac.importKey(secretKey);
 ```
 
 ### Sign
 
-It takes secret key and data to sign. It returns a signature which could be used to verify the data.
+The sign method takes a secret key (or CryptoKey) and data to generate a signature. If you provide a raw secret key, it will automatically be imported.
 
 ```ts
-const key = await hmac.importKey("SHA-256", secretKey);
-const signature = await hmac.sign(key, "text");
+const key = await hmac.importKey("my-secret-key");
+const signature = await hmac.sign(key, "text to sign");
+console.log(signature); // Encoded based on the selected encoding format (e.g., hex)
 ```
 
-You could also directly sign using secret key.
+You could also directly sign using the raw string secret key.
 
 ```ts
-const signature2 = await hmac.sign(secretKey, "text");
+const signature2 = await hmac.sign("secret-key",{
+    data: "text"
+});
 ```
 
 ### Verify
 
-It takes object with signature and data. This is useful so you don't accidentally swap the order of signature and data.
+The verify method checks if a given signature matches the data using the secret key. You can provide either a raw secret key or a CryptoKey.
 
 ```ts
-const isValid = await hmac.verify(key, {
-    signature,
-    data: "text"
-});
+const key = await hmac.importKey("my-secret-key");
+const isValid = await hmac.verify(key, "text to sign", signature);
+console.log(isValid); // true or false
 ```
 
 ## Random String
@@ -86,9 +98,9 @@ Random crypto secure string generator. It wraps over `crypto.getRandomValues` an
 
 1. first create a random string generator with desired charset.
 ```ts
-import { createRandomStringGenerator } from "@buttery-auth/utils/random-string"
+import { createRandomStringGenerator } from "@buttery-auth/utils/random"
 
-export const generateRandomString = createRandomStringGenerator("A-Z", "0-9", "a-z", "-_")
+export const generateRandomString = createRandomStringGenerator("A-Z", "0-9", "a-z", "-_") 
 ```
 
 2. generate random string based on length.
@@ -217,6 +229,73 @@ const isValid = await ecdsa.verify(publicKey, {
 });
 ```
 
+## OTP
+
+The OTP utility provides a simple and secure way to generate and verify one-time passwords (OTPs), commonly used in multi-factor authentication (MFA) systems. It includes support for both HOTP (HMAC-based One-Time Password) and TOTP (Time-based One-Time Password) standards.
+
+It's implemented based on [RFC 4226](https://tools.ietf.org/html/rfc4226) and [RFC 6238](https://tools.ietf.org/html/rfc6238).
+
+### Generating HOTP
+
+HOTP generates a one-time password based on a counter value and a secret key. The counter should be incremented for each new OTP.
+
+```ts
+import { createOTP } from "@buttery-auth/utils/otp";
+const secret = "my-super-secret-key";
+const counter = 1234;
+const otp = createOTP(secret, {
+  digits: 6,
+}).hotp(counter);
+``` 
+
+### Generating TOTP
+
+TOTP generates a one-time password based on the current time and a secret key. The time step is typically 30 seconds.
+
+```ts
+import { createOTP } from "@buttery-auth/utils/otp";
+const secret = "my-super-secret-key"
+const otp = createOTP(secret, {
+  digits: 6,
+  period: 30,
+}).totp();
+```
+
+### Verifying TOTP
+
+Verify a TOTP against the secret key and a specified time window. The default time window is 30 seconds.
+
+```ts
+import { createOTP } from "@buttery-auth/utils/otp";
+const secret = "my-super-secret-key"
+const isValid = createOTP(secret, {
+  digits: 6,
+  period: 30,
+}).verify(otp);
+```
+
+You can also specify the time window in seconds.
+
+```ts
+import { createOTP } from "@buttery-auth/utils";
+const isValid = createOTP(secret).verify(otp, { window: 60 });
+```
+
+### Generate URL for Authenticator App
+
+Generate a URL for provisioning a TOTP secret key in an authenticator app.
+
+- `issuer` - The name of the service or app.
+- `account` - The user's email or username.
+
+```ts
+import { createOTP } from "@buttery-auth/utils/otp";
+
+const secret = "my-super-secret-key";
+const qrCodeUrl = createOTP(secret).url("my-app", "user@email.com"); 
+```
+
+
 ## Base64
 
 Base64 utilities provide a simple interface to encode and decode data in base64 format.
@@ -232,7 +311,6 @@ const encodedData = base64.encode("Data to encode");
 ```
 
 options:
-- `urlSafe` - URL-safe encoding, replacing `+` with `-` and `/` with `_`.
 - `padding` - Include padding characters (`=`) at the end of the encoded string
 
 ```ts
@@ -249,123 +327,58 @@ const decodedData = await base64.decode(encodedData);
 
 It automatically detects if the input is URL-safe and includes padding characters.
 
+### Base64Url
 
-## OTP
-
-The OTP utility provides a simple and secure way to generate and verify one-time passwords (OTPs), commonly used in multi-factor authentication (MFA) systems. It includes support for both HOTP (HMAC-based One-Time Password) and TOTP (Time-based One-Time Password) standards.
-
-It's implemented based on [RFC 4226](https://tools.ietf.org/html/rfc4226) and [RFC 6238](https://tools.ietf.org/html/rfc6238).
-
-### Create OTP Generator
-
-To create an OTP generator, use the createOTP function. It allows you to specify the SHA hash algorithm (default: "SHA-1") and the number of digits in the OTP (default: 6).
+Url safe alternative
 
 ```ts
-import { createOTP } from "@buttery-auth/utils/otp";
+import { base64Url } from "@buttery-auth/utils/base64";
 
-const { generateHOTP, generateTOTP, verifyTOTP } = createOTP("SHA-256", 6);
+const encodedData = base64Url.encode("Data to encode");
 ```
 
-### Generating HOTP
+## Hex
 
-HOTP generates a one-time password based on a counter value and a secret key. The counter should be incremented for each new OTP.
+Hex utilities provide a simple interface to encode and decode data in hexadecimal format.
+
+### Encoding
+
+Encode data in hexadecimal format. Input can be a string, `ArrayBuffer`, or `TypedArray`.
 
 ```ts
-const secret = "my-super-secret-key";
-const counter = 1234;
-const otp = generateHOTP(secret, counter);
+import { hex } from "@buttery-auth/utils/hex";
+
+const encodedData = hex.encode("Data to encode");
 ```
 
-### Generating TOTP
+### Decoding
 
-TOTP generates a one-time password based on the current time and a secret key. The time step is typically 30 seconds.
+Decode hexadecimal-encoded data. Input can be a string or `ArrayBuffer`.
 
 ```ts
-const secret = "my-super-secret-key"
-const otp = generateTOTP(secret);
+const decodedData = hex.decode(encodedData);
 ```
 
-### Verifying TOTP
+## Binary
 
-Verify a TOTP against the secret key and a specified time window. The default time window is 30 seconds.
+A utilities provide a simple interface to encode and decode data in binary format. It uses `TextEncode` and `TextDecoder` to encode and decode data respectively.
+
+### Encoding
 
 ```ts
-const secret = "my-super-secret-key"
-const isValid = verifyTOTP(secret, otp);
+import { binary } from "@buttery-auth/util/binary"
+
+const data = binary.encode("Hello World!")
 ```
 
-You can also specify the time window in seconds.
+### Decoding
 
 ```ts
-const isValid = verifyTOTP(secret, otp, { window: 60 });
+import { binary } from "@buttery-auth/util/binary"
+
+const data = binary.decode(new Unit8Array([[72, 101, 108, 108, 111]]))
 ```
 
-## Cookies
+## License
 
-A utility for working with HTTP cookies, offering functionalities to parse, serialize, and manage cookies with optional signing for security.
-
-### Parsing Cookies
-
-Parses a Set-Cookie header string into a Map of cookie names and their attributes.
-
-```ts
-import { cookies } from "@buttery-auth/utils/cookies";
-
-const setCookie = "sessionId=abc123; Max-Age=3600; Secure; HttpOnly";
-const parsedCookies = cookies.parseSetCookies(setCookie);
-```
-
-You can also parse a signed cookie to verify its integrity and authenticity.
-
-```ts
-import { parseCookie } from "@buttery-auth/utils/cookies";
-
-const cookie = parseCookei("name=value.signature");
-```
-
-### Serializing Cookies
-
-Creates a Set-Cookie string with optional signing.
-
-```ts
-const serializedCookie = await cookies.serializeCookie({
-  name: "sessionId",
-  value: "abc123",
-  attributes: { secure: true, httpOnly: true },
-  signed: { key: "my-secret-key" },
-});
-
-console.log(serializedCookie);
-```
-
-### Verify Signed Cookie
-
-Validates a signed cookie by verifying its signature.
-
-```ts
-const isValid = cookies.verifySignedCookie({
-  cookie: "sessionId=abc123.abcdef",
-  key: "my-secret-key",
-});
-console.log(isValid); // true or false
-```
-
-### Parse set-cookie header
-
-Extracts and decodes cookies from a Cookie header.
-
-```ts
-const cookieHeader = "sessionId=abc123";
-const parsed = await cookies.parseCookies(cookieHeader, "sessionId");
-console.log(parsed.get("sessionId")); // "abc123"
-```
-
-### Get cookie
-
-Retrieves the value of a specific cookie by name, optionally verifying its signature.
-
-```ts
-const cookieHeader = "sessionId=abc123";
-const value = await cookies.getCookie(cookieHeader, "sessionId");
-console.log(value); // "abc123"
-```
+MIT
